@@ -1,6 +1,5 @@
-![Scheme](/scheme.png)
 
-# Application monitoring with Traefik, Prometheus, Grafana, and Docker Compose for beginners
+### Application monitoring with Traefik, Prometheus, Grafana, and Docker Compose 
 
 This is my vision of a simple monitoring infrastructure.
 Simple startup:
