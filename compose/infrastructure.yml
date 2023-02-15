@@ -3,7 +3,7 @@ version: '3.9'
 networks:
   app_net:
     name: app_net
-    driver: bridge
+#    driver: bridge
   bridge:
     external: true
 
@@ -19,6 +19,7 @@ services:
       - "443:443"
       - "8080:8080"
     labels:
+      - "traefik.enable=true"
       - "traefik.http.routers.traefik-ui.rule=Host(`${TRAEFIK_URL}`)"
       - "traefik.http.routers.traefik-ui.service=api@internal"
       - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
@@ -43,16 +44,21 @@ services:
     networks:
       - app_net
 
-#  tomcat:
-#    container_name:  tom
-#    hostname:        tom
-#    build:           ./temp_src
-#    ports:
-#      -              9081:80
-#    labels:
-#      -              "traefik.http.routers.tomcat.rule=PathPrefix(`/tom`)"
-#      -              "traefik.http.middlewares.theTomStrip.stripprefix.prefixes=/tom"
-#      -              "traefik.http.routers.tomcat.middlewares=theTomStrip"
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - app_net
+    restart: unless-stopped 
 
   prometheus:
     image: prom/prometheus
@@ -65,6 +71,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.size=256MB'
     labels:
+      - "traefik.enable=true"
       - "traefik.http.routers.prometheus.rule=Host(`${PROM_URL}`)"
       - "traefik.http.routers.prometheus.service=prometheus"
 #      - "traefik.http.routers.prometheus.middlewares=traefik-auth"
@@ -94,10 +101,8 @@ services:
     networks:
       - app_net
 
-
-
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:9.3.6-ubuntu
     container_name: grafana
     depends_on:
       - prometheus
@@ -105,14 +110,14 @@ services:
     #  - ${GRAFANA_VOLUME}:/var/lib/grafana
     #  - ./grafana/provisioning/:/etc/grafana/provisioning/
     environment:
-      - GF_SECURITY_ALLOW_EMBEDDING=true
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_NAME=Viewer
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_AUTH_DISABLE_LOGIN_FORM=true
-      - GF_AUTH_OAUTH_AUTO_LOGIN=true
-    # - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=true
-    # - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    #  - GF_SECURITY_ALLOW_EMBEDDING=true
+    #  - GF_AUTH_ANONYMOUS_ENABLED=true
+    #  - GF_AUTH_ANONYMOUS_ORG_NAME=Viewer
+    #  - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    #  - GF_AUTH_DISABLE_LOGIN_FORM=true
+    #  - GF_AUTH_OAUTH_AUTO_LOGIN=true
+    ## - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=true
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PWD}
     labels:
@@ -130,54 +135,65 @@ services:
         max-file: "3"      
 
   cmdbuild_db:
-    #build: ./postgres/
+    build: ./postgres/
     image: olehkondratov/cmdbuild:db-12
     container_name: cmdbuild_db
     volumes:
     - cmdbuild-db:/var/lib/postgresql
-#    ports:
-#      - 5432:5432
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    #    env_file:
-    #      - config.env
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     restart: always
     networks:
       - app_net
     mem_limit: 1000m
     mem_reservation: 300m
 
+  postgres-exporter:
+    image: bitnami/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      # - DATA_SOURCE_NAME="postgresql://postgres:postgres@cmdbuild_db:5432/postgres?sslmode=disable"
+      - DATA_SOURCE_URI=cmdbuild_db:5432/postgres?sslmode=disable
+      - DATA_SOURCE_USER=postgres
+      - DATA_SOURCE_PASS=postgres
+    links:
+      - cmdbuild_db
+      - prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.postgres-exporter.rule=Host(`${POSTGRES_EXPORTER_URL}`)"
+      - "traefik.http.routers.postgres-exporter.service=postgres-exporter"
+      - "traefik.http.services.postgres-exporter.loadbalancer.server.port=9187"
+    networks:
+      - app_net
+
   cmdbuild_app:
-    #build: cmdbuild/
+    build: .
     image: olehkondratov/ready2use-2.3-3.4.1:latest
     container_name: cmdbuild_app
     links:
-    - cmdbuild_db
+      - cmdbuild_db
     depends_on:
-    - cmdbuild_db
-#    ports:
-#      - 8080:8080
+      - cmdbuild_db
     restart: always
     volumes:
-    - cmdbuild-tomcat:/usr/local/tomcat
+      - cmdbuild-tomcat:/usr/local/tomcat
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASS=postgres
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASS=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=5432
       - POSTGRES_HOST=cmdbuild_db
       - POSTGRES_DB=cmdbuild_r2u2
       - CMDBUILD_DUMP=demo.dump.xz
     #       - CMDBUILD_DUMP=archiwum.dump.xz
       - JAVA_OPTS=-Xmx4000m -Xms2000m
-    #    env_file:
-    #      - config.env
     labels:
-    - "traefik.enable=true"
-    - "traefik.http.routers.cmdbuild.rule=Host(`${CMDBUILD}`)"
-    - "traefik.http.routers.cmdbuild.service=cmdbuild"
+      - "traefik.enable=true"
+      - "traefik.http.routers.cmdbuild.rule=Host(`${CMDBUILD}`)"
+      - "traefik.http.routers.cmdbuild.service=cmdbuild"
       #- "traefik.http.routers.cmdbuild.middlewares=traefik-auth"
-    - "traefik.http.services.cmdbuild.loadbalancer.server.port=8080"
+      - "traefik.http.services.cmdbuild.loadbalancer.server.port=8080"
     networks:
       - app_net
     mem_limit: 4000m
