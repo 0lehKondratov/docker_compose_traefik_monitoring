@@ -44,6 +44,49 @@ services:
     networks:
       - app_net
 
+  shark:
+    image: garudaru/shark:2.5
+    restart: always
+  #  env_file:
+  #  - '.env'
+  #  ports:
+  # - 8484:8080
+    depends_on:
+      - cmdbuild_app
+    volumes:
+      - shark-logs:/usr/local/tomcat/logs 
+    networks:
+      - app_net
+    links:
+     - cmdbuild_app:cmdbuild
+
+  geo:
+   image: garudaru/geoserver 
+   ports:
+    - 8282:8080
+   restart: always
+   depends_on:
+    - cmdbuild_app
+   volumes:
+    - geo-logs:/usr/local/tomcat/logs 
+    - geo-data:/usr/local/tomcat/webapps/geoserver/data
+   networks:
+    - app_net
+ 
+  bim:
+    image: garudaru/bimserver
+    ports:
+      - 8383:8080
+    restart: always
+    environment:
+       JAVA_OPTS: "-Xms128m -Xmx1024m"
+    depends_on:
+      - cmdbuild_app
+    volumes:
+      - bimv-data:/bimhomedir
+    networks:
+      - app_net
+
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
     container_name: node_exporter
@@ -242,3 +285,32 @@ volumes:
       o: bind
       type: none
       device: /opt/dctr1/pgadmin-data
+
+  geo-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/geo-data
+
+  geo-logs:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/geo-logs
+
+  bimv-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/bimv-data
+
+  shark-logs:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/shark-logs
+
