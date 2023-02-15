@@ -1,25 +1,29 @@
 version: '3.9'
 
+networks:
+  app_net:
+    name: app_net
+    driver: bridge
+  bridge:
+    external: true
+
 services:
   traefik:
     image: traefik:v2.5.4
-    command:
-      - "--log.level=DEBUG"
-      - "--api.dashboard=true"
-      - "--metrics.prometheus=true"
-      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
-      - "--providers.docker=true"
-      - "--providers.docker.watch"
+    container_name: traefik
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./files/traefik.yml:/etc/traefik/traefik.yml
     ports:
-      - 80:80
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
     labels:
       - "traefik.http.routers.traefik-ui.rule=Host(`${TRAEFIK_URL}`)"
       - "traefik.http.routers.traefik-ui.service=api@internal"
       - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
       - "traefik.http.middlewares.traefik-auth.basicauth.removeheader=true"
-      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
+#      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
     networks:
       - app_net
     restart: unless-stopped
@@ -28,10 +32,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  whoami:
+    image: containous/whoami
+    container_name: whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`${WHOAMI_URL}`)"
+      - "traefik.http.routers.whoami.service=whoami"
+      - "traefik.http.services.whoami.loadbalancer.server.port=80"
+    networks:
+      - app_net
+
+#  tomcat:
+#    container_name:  tom
+#    hostname:        tom
+#    build:           ./temp_src
+#    ports:
+#      -              9081:80
+#    labels:
+#      -              "traefik.http.routers.tomcat.rule=PathPrefix(`/tom`)"
+#      -              "traefik.http.middlewares.theTomStrip.stripprefix.prefixes=/tom"
+#      -              "traefik.http.routers.tomcat.middlewares=theTomStrip"
+
   prometheus:
     image: prom/prometheus
+    container_name: prometheus
     volumes:
-      - ./prometheus/:/etc/prometheus/
+      - prometheus-cfg:/etc/prometheus/
       - ${PROM_VOLUME}:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -40,7 +67,7 @@ services:
     labels:
       - "traefik.http.routers.prometheus.rule=Host(`${PROM_URL}`)"
       - "traefik.http.routers.prometheus.service=prometheus"
-      - "traefik.http.routers.prometheus.middlewares=traefik-auth"
+#      - "traefik.http.routers.prometheus.middlewares=traefik-auth"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
     networks:
       - app_net
@@ -50,20 +77,49 @@ services:
         max-size: "10m"
         max-file: "3"
   
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin4_container
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_URL}`)"
+      - "traefik.http.routers.pgadmin.service=pgadmin"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+    networks:
+      - app_net
+
+
+
   grafana:
     image: grafana/grafana
+    container_name: grafana
     depends_on:
       - prometheus
-    volumes:
-      - ${GRAFANA_VOLUME}:/var/lib/grafana
-      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    # volumes:
+    #  - ${GRAFANA_VOLUME}:/var/lib/grafana
+    #  - ./grafana/provisioning/:/etc/grafana/provisioning/
     environment:
-      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
-      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Viewer
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_AUTH_OAUTH_AUTO_LOGIN=true
+    # - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=true
+    # - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PWD}
     labels:
+      - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_URL}`)"
       - "traefik.http.routers.grafana.service=grafana"
-      - "traefik.http.routers.grafana.middlewares=traefik-auth"
+#      - "traefik.http.routers.grafana.middlewares=traefik-auth"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     networks:
       - app_net
@@ -73,6 +129,100 @@ services:
         max-size: "10m"
         max-file: "3"      
 
-networks:
-  app_net:
-      name: app_net
+  cmdbuild_db:
+    #build: ./postgres/
+    image: olehkondratov/cmdbuild:db-12
+    container_name: cmdbuild_db
+    volumes:
+    - cmdbuild-db:/var/lib/postgresql
+#    ports:
+#      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    #    env_file:
+    #      - config.env
+    restart: always
+    networks:
+      - app_net
+    mem_limit: 1000m
+    mem_reservation: 300m
+
+  cmdbuild_app:
+    #build: cmdbuild/
+    image: olehkondratov/ready2use-2.3-3.4.1:latest
+    container_name: cmdbuild_app
+    links:
+    - cmdbuild_db
+    depends_on:
+    - cmdbuild_db
+#    ports:
+#      - 8080:8080
+    restart: always
+    volumes:
+    - cmdbuild-tomcat:/usr/local/tomcat
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASS=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=cmdbuild_db
+      - POSTGRES_DB=cmdbuild_r2u2
+      - CMDBUILD_DUMP=demo.dump.xz
+    #       - CMDBUILD_DUMP=archiwum.dump.xz
+      - JAVA_OPTS=-Xmx4000m -Xms2000m
+    #    env_file:
+    #      - config.env
+    labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.cmdbuild.rule=Host(`${CMDBUILD}`)"
+    - "traefik.http.routers.cmdbuild.service=cmdbuild"
+      #- "traefik.http.routers.cmdbuild.middlewares=traefik-auth"
+    - "traefik.http.services.cmdbuild.loadbalancer.server.port=8080"
+    networks:
+      - app_net
+    mem_limit: 4000m
+    mem_reservation: 2000m
+
+
+volumes:
+  cmdbuild-db:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/cmdbuild-db
+
+  cmdbuild-tomcat:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/cmdbuild-tomcat
+
+  prometheus-cfg:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/prometheus-cfg
+
+  prometheus-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/prometheus-data
+
+  grafana-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/grafana-data
+
+  pgadmin-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/pgadmin-data
