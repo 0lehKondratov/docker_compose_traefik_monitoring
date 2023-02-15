@@ -45,7 +45,8 @@ services:
       - app_net
 
   shark:
-    image: garudaru/shark:2.5
+    image: garudaru/shark:latest
+    container_name: shark
     restart: always
   #  env_file:
   #  - '.env'
@@ -62,6 +63,7 @@ services:
 
   geo:
    image: garudaru/geoserver 
+   container_name: geo
    ports:
     - 8282:8080
    restart: always
@@ -77,6 +79,7 @@ services:
     image: garudaru/bimserver
     ports:
       - 8383:8080
+    container_name: bim
     restart: always
     environment:
        JAVA_OPTS: "-Xms128m -Xmx1024m"
