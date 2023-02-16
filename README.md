@@ -4,14 +4,15 @@
 mkdir -p /opt/dctr1/cmdbuild-db
 mkdir -p /opt/dctr1/cmdbuild-tomcat
 mkdir -p /opt/dctr1/pgadmin-data
+mkdir -p ./grafana-cfg
 mkdir -p /opt/dctr1/grafana-data
 mkdir -p /opt/dctr1/prometheus-data
+mkdir -p ./prometheus-cfg
 mkdir -p /opt/dctr1/geo-data
 mkdir -p /opt/dctr1/geo-logs
 mkdir -p /opt/dctr1/bimv-data
 mkdir -p /opt/dctr1/shark-logs
 mkdir -p /opt/dctr1/shark-tomcat
-mkdir -p /opt/dctr1/
 ```
 
 ```
