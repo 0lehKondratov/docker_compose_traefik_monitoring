@@ -55,7 +55,8 @@ services:
     depends_on:
       - cmdbuild_app
     volumes:
-      - shark-logs:/usr/local/tomcat/logs 
+      - shark-logs:/usr/local/tomcat/logs
+      - shark-tomcat:/usr/local/tomcat
     networks:
       - app_net
     links:
@@ -316,4 +317,12 @@ volumes:
       o: bind
       type: none
       device: /opt/dctr1/shark-logs
+
+
+  shark-tomcat:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/shark-tomcat
 
