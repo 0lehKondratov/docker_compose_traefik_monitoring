@@ -3,6 +3,7 @@
 ```
 mkdir -p /opt/dctr1/cmdbuild-db
 mkdir -p /opt/dctr1/cmdbuild-tomcat
+mkdir -p ./backup
 mkdir -p /opt/dctr1/pgadmin-data
 mkdir -p ./grafana-cfg
 mkdir -p /opt/dctr1/grafana-data
@@ -39,9 +40,13 @@ docker network ls
 
 ```
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/cmdbuild-db cmdbuild-db
+docker volume create --opt type=none --opt o=bind --driver local --opt device=./cmdbuild-backup cmdbuild-backup
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/cmdbuild-tomcat cmdbuild-tomcat
+
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/pgadmin-data pgadmin-data
+docker volume create --opt type=none --opt o=bind --driver local --opt device=./grafana-cfg grafana-cfg
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/grafana-data grafana-data
+docker volume create --opt type=none --opt o=bind --driver local --opt device=./prometheus-cfg prometheus-cfg
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/prometheus-data prometheus-data
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/geo-data geo-data
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/geo-logs geo-logs
@@ -50,7 +55,7 @@ docker volume create --opt type=none --opt o=bind --driver local --opt device=/o
 docker volume create --opt type=none --opt o=bind --driver local --opt device=/opt/dctr1/shark-tomcat shark-tomcat
 ```
 
- docker-compose --env-file .env.dev -f infrastructure.yml up
+ docker compose --env-file .env.dev -f infrastructure.yml up
 
 ```
 pg_dump --host localhost --port 5432 --username "postgres" --format custom --verbose --file ./cmdbuild.backup cmdbuild_db

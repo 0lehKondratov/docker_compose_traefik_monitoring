@@ -3,7 +3,7 @@ version: '3.9'
 networks:
   app_net:
     name: app_net
-#    driver: bridge
+    driver: bridge
   bridge:
     external: true
 
@@ -24,7 +24,7 @@ services:
       - "traefik.http.routers.traefik-ui.service=api@internal"
       - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
       - "traefik.http.middlewares.traefik-auth.basicauth.removeheader=true"
-#      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
+      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
     networks:
       - app_net
     restart: unless-stopped
@@ -41,55 +41,56 @@ services:
       - "traefik.http.routers.whoami.rule=Host(`${WHOAMI_URL}`)"
       - "traefik.http.routers.whoami.service=whoami"
       - "traefik.http.services.whoami.loadbalancer.server.port=80"
+      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
     networks:
       - app_net
 
-  shark:
-    image: garudaru/shark:latest
-    container_name: shark
-    restart: always
-  #  env_file:
-  #  - '.env'
-  #  ports:
-  # - 8484:8080
-    depends_on:
-      - cmdbuild_app
-    volumes:
-      - shark-logs:/usr/local/tomcat/logs
-      - shark-tomcat:/usr/local/tomcat
-    networks:
-      - app_net
-    links:
-     - cmdbuild_app:cmdbuild
+#  shark:
+#    image: garudaru/shark:latest
+#    container_name: shark
+#    restart: always
+#  #  env_file:
+#  #  - '.env'
+#  #  ports:
+#  # - 8484:8080
+#    depends_on:
+#      - cmdbuild_app
+#    volumes:
+#      - shark-logs:/usr/local/tomcat/logs
+#      - shark-tomcat:/usr/local/tomcat
+#    networks:
+#      - app_net
+#    links:
+#     - cmdbuild_app:cmdbuild
 
-  geo:
-   image: garudaru/geoserver 
-   container_name: geo
-   ports:
-    - 8282:8080
-   restart: always
-   depends_on:
-    - cmdbuild_app
-   volumes:
-    - geo-logs:/usr/local/tomcat/logs 
-    - geo-data:/usr/local/tomcat/webapps/geoserver/data
-   networks:
-    - app_net
+#  geo:
+#   image: garudaru/geoserver 
+#   container_name: geo
+#   ports:
+#    - 8282:8080
+#   restart: always
+#   depends_on:
+#    - cmdbuild_app
+#   volumes:
+#    - geo-logs:/usr/local/tomcat/logs 
+#    - geo-data:/usr/local/tomcat/webapps/geoserver/data
+#   networks:
+#    - app_net
  
-  bim:
-    image: garudaru/bimserver
-    ports:
-      - 8383:8080
-    container_name: bim
-    restart: always
-    environment:
-       JAVA_OPTS: "-Xms128m -Xmx1024m"
-    depends_on:
-      - cmdbuild_app
-    volumes:
-      - bimv-data:/bimhomedir
-    networks:
-      - app_net
+#  bim:
+#    image: garudaru/bimserver
+#    ports:
+#      - 8383:8080
+#    container_name: bim
+#    restart: always
+#    environment:
+#       JAVA_OPTS: "-Xms128m -Xmx1024m"
+#    depends_on:
+#      - cmdbuild_app
+#    volumes:
+#      - bimv-data:/bimhomedir
+#    networks:
+#      - app_net
 
   node_exporter:
     image: quay.io/prometheus/node-exporter:latest
@@ -121,7 +122,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.prometheus.rule=Host(`${PROM_URL}`)"
       - "traefik.http.routers.prometheus.service=prometheus"
-#      - "traefik.http.routers.prometheus.middlewares=traefik-auth"
+      - "traefik.http.routers.prometheus.middlewares=traefik-auth"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
     networks:
       - app_net
@@ -145,6 +146,7 @@ services:
       - "traefik.http.routers.pgadmin.rule=Host(`${PGADMIN_URL}`)"
       - "traefik.http.routers.pgadmin.service=pgadmin"
       - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
     networks:
       - app_net
 
@@ -171,8 +173,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_URL}`)"
       - "traefik.http.routers.grafana.service=grafana"
-#      - "traefik.http.routers.grafana.middlewares=traefik-auth"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.grafana.middlewares=traefik-auth"
     networks:
       - app_net
     restart: unless-stopped
@@ -187,6 +189,7 @@ services:
     container_name: cmdbuild_db
     volumes:
     - cmdbuild-db:/var/lib/postgresql
+    - cmdbuild-backup:/backup
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -206,12 +209,13 @@ services:
       - DATA_SOURCE_PASS=postgres
     links:
       - cmdbuild_db
-      - prometheus
+#      - prometheus
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.postgres-exporter.rule=Host(`${POSTGRES_EXPORTER_URL}`)"
       - "traefik.http.routers.postgres-exporter.service=postgres-exporter"
       - "traefik.http.services.postgres-exporter.loadbalancer.server.port=9187"
+      - "traefik.http.routers.traefik-ui.middlewares=traefik-auth"
     networks:
       - app_net
 
@@ -226,6 +230,7 @@ services:
     restart: always
     volumes:
       - cmdbuild-tomcat:/usr/local/tomcat
+      - cmdbuild-backup:/backup
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASS=${POSTGRES_PASSWORD}
@@ -239,13 +244,12 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.cmdbuild.rule=Host(`${CMDBUILD}`)"
       - "traefik.http.routers.cmdbuild.service=cmdbuild"
-      #- "traefik.http.routers.cmdbuild.middlewares=traefik-auth"
+      - "traefik.http.routers.cmdbuild.middlewares=traefik-auth"
       - "traefik.http.services.cmdbuild.loadbalancer.server.port=8080"
     networks:
       - app_net
     mem_limit: 4000m
     mem_reservation: 2000m
-
 
 volumes:
   cmdbuild-db:
@@ -254,6 +258,13 @@ volumes:
       o: bind
       type: none
       device: /opt/dctr1/cmdbuild-db
+
+  cmdbuild-backup:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /opt/dctr1/cmdbuild-backup
 
   cmdbuild-tomcat:
     driver: local
@@ -267,7 +278,7 @@ volumes:
     driver_opts:
       o: bind
       type: none
-      device: /opt/dctr1/prometheus-cfg
+      device: ./prometheus-cfg
 
   prometheus-data:
     driver: local
@@ -276,12 +287,12 @@ volumes:
       type: none
       device: /opt/dctr1/prometheus-data
 
-  grafana-data:
+  grafana-cfg:
     driver: local
     driver_opts:
       o: bind
       type: none
-      device: /opt/dctr1/grafana-data
+      device: ./grafana-cfg
 
   pgadmin-data:
     driver: local
@@ -318,11 +329,9 @@ volumes:
       type: none
       device: /opt/dctr1/shark-logs
 
-
   shark-tomcat:
     driver: local
     driver_opts:
       o: bind
       type: none
       device: /opt/dctr1/shark-tomcat
-
